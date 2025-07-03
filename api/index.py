@@ -138,18 +138,79 @@ def token_required(f):
     return decorated
 
 
+# def call_api(url, headers, params):
+#     """Call FatSecret API with retry logic for failures"""
+#     for attempt in range(MAX_RETRIES):
+#         try:
+#             logger.info(f"API request attempt {attempt + 1}")
+            
+#             response = requests.post(url, headers=headers, data=params)
+#             logger.info(f"Response status: {response.status_code}")
+            
+#             # Check for API error responses even with 200 status
+#             if response.status_code == 200 and '"error"' in response.text:
+#                 error_json = response.json()
+#                 if 'error' in error_json:
+#                     error_msg = error_json['error'].get('message', 'Unknown API error')
+                    
+#                     # If token is invalid, refresh and retry
+#                     if 'token is invalid' in error_msg.lower():
+#                         if attempt < MAX_RETRIES - 1:
+#                             logger.warning("Invalid token detected, refreshing token and retrying...")
+#                             headers["Authorization"] = f"Bearer {get_token(force_refresh=True)}"
+#                             continue
+                    
+#                     raise Exception(f"API error: {error_msg}")
+            
+#             response.raise_for_status()
+#             return response
+            
+#         except requests.RequestException as e:
+#             logger.error(f"Request failed on attempt {attempt + 1}: {str(e)}")
+            
+#             # Retry only for certain errors
+#             if attempt < MAX_RETRIES - 1:
+#                 # Check if we need to refresh token
+#                 if hasattr(e, 'response') and e.response is not None:
+#                     if e.response.status_code in (401, 403):
+#                         logger.warning("Authentication error, refreshing token before retry")
+#                         headers["Authorization"] = f"Bearer {get_token(force_refresh=True)}"
+                
+#                 wait_time = RETRY_DELAY * (2 ** attempt)  # Exponential backoff
+#                 logger.info(f"Retrying in {wait_time} seconds...")
+#                 time.sleep(wait_time)
+#             else:
+#                 logger.error("All API request attempts failed")
+#                 raise
+
 def call_api(url, headers, params):
     """Call FatSecret API with retry logic for failures"""
     for attempt in range(MAX_RETRIES):
         try:
             logger.info(f"API request attempt {attempt + 1}")
+            logger.info(f"URL: {url}")
+            logger.info(f"Headers: {headers}")
             
-            response = requests.post(url, headers=headers, data=params)
+            # Handle both form data and JSON requests
+            if isinstance(params, dict) and 'image_b64' in params:
+                # This is an image recognition request - send as JSON
+                logger.info("Sending as JSON request (image recognition)")
+                logger.info(f"JSON payload keys: {list(params.keys())}")
+                response = requests.post(url, headers=headers, json=params)
+            else:
+                # This is a regular API request - send as form data
+                logger.info("Sending as form data request")
+                logger.info(f"Form data: {params}")
+                response = requests.post(url, headers=headers, data=params)
+            
             logger.info(f"Response status: {response.status_code}")
+            logger.info(f"Response headers: {dict(response.headers)}")
+            logger.info(f"Response body preview: {response.text[:500]}")
             
             # Check for API error responses even with 200 status
             if response.status_code == 200 and '"error"' in response.text:
                 error_json = response.json()
+                logger.error(f"API returned error in 200 response: {error_json}")
                 if 'error' in error_json:
                     error_msg = error_json['error'].get('message', 'Unknown API error')
                     
