@@ -715,6 +715,248 @@ def autocomplete_food(token):
         logger.error(f"Error in autocomplete_food: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/text-to-food", methods=["POST"])
+@token_required
+def text_to_food_analysis(token):
+    """
+    Analyze text description of foods and return nutrition data
+    
+    This endpoint:
+    1. Accepts transcribed text from the app
+    2. Processes text with FatSecret NLP
+    3. Returns identified foods and nutrition data
+    
+    JSON body:
+    {
+        "text": "I ate an apple and a banana for breakfast",
+        "region": "US",  // optional
+        "language": "en",  // optional
+        "include_food_data": true  // optional
+    }
+    """
+    try:
+        logger.info("🍽️ Text-to-food analysis request received")
+        
+        # Get JSON data from request
+        request_data = request.json
+        
+        if not request_data:
+            return jsonify({"error": "Missing request body"}), 400
+        
+        # Check if text is present
+        if 'text' not in request_data:
+            return jsonify({"error": "Missing required field: text"}), 400
+        
+        transcribed_text = request_data['text'].strip()
+        
+        if not transcribed_text:
+            return jsonify({"error": "Empty text field"}), 400
+        
+        # Get optional parameters
+        region = request_data.get('region', 'US')
+        language = request_data.get('language', 'en')
+        include_food_data = request_data.get('include_food_data', True)
+        
+        logger.info(f"Processing text: '{transcribed_text}'")
+        logger.info(f"Parameters - region: {region}, language: {language}, include_food_data: {include_food_data}")
+        
+        # Process text with FatSecret NLP
+        logger.info("🍽️ Processing text with FatSecret NLP...")
+        
+        nlp_request = {
+            "user_input": transcribed_text,
+            "region": region,
+            "include_food_data": include_food_data
+        }
+        
+        # Add language if region is specified and language is provided
+        if region and language:
+            nlp_request["language"] = language
+        
+        # Call FatSecret NLP API
+        api_url = "https://platform.fatsecret.com/rest/natural-language-processing/v1"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}"
+        }
+        
+        logger.info(f"Sending NLP request: {nlp_request}")
+        
+        nlp_response = requests.post(api_url, headers=headers, json=nlp_request)
+        
+        logger.info(f"NLP Response status: {nlp_response.status_code}")
+        
+        if nlp_response.status_code == 200:
+            nlp_data = nlp_response.json()
+            
+            # Extract food count for logging
+            food_count = 0
+            if "food_response" in nlp_data and isinstance(nlp_data["food_response"], list):
+                food_count = len(nlp_data["food_response"])
+            
+            logger.info(f"✅ NLP analysis successful: {food_count} foods identified")
+            
+            # Return result
+            return jsonify({
+                "success": True,
+                "text": transcribed_text,
+                "food_analysis": nlp_data,
+                "metadata": {
+                    "foods_identified": food_count,
+                    "region": region,
+                    "language": language,
+                    "processing_time": "< 1s"
+                }
+            })
+        else:
+            # NLP failed
+            try:
+                nlp_error = nlp_response.json()
+                error_message = nlp_error.get('error', {}).get('message', 'NLP processing failed')
+            except:
+                error_message = f"NLP processing failed with status {nlp_response.status_code}"
+            
+            logger.warning(f"⚠️ NLP failed: {error_message}")
+            
+            return jsonify({
+                "success": False,
+                "text": transcribed_text,
+                "error": error_message,
+                "suggestion": "Food analysis failed. Please try rephrasing your food description."
+            }), 500
+        
+    except Exception as e:
+        logger.error(f"❌ Error in text_to_food_analysis: {str(e)}")
+        
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "details": str(e) if app.debug else None
+        }), 500
+    
+@app.route("/api/food/image-recognition", methods=["POST"])
+@token_required
+def recognize_food_image(token):
+    """
+    Identify food items and their nutritional information from an image
+    """
+    try:
+        logger.info("🔍 Image recognition request received")
+        logger.info(f"📥 Request content type: {request.content_type}")
+        logger.info(f"📥 Request method: {request.method}")
+        
+        # Get JSON data from request
+        request_data = request.json
+        logger.info(f"📦 Request data type: {type(request_data)}")
+        logger.info(f"📦 Request data keys: {list(request_data.keys()) if request_data else 'None'}")
+        
+        if not request_data:
+            logger.error("❌ Missing request body")
+            return jsonify({"error": "Missing request body"}), 400
+        
+        # Validate required fields
+        if "image_b64" not in request_data:
+            logger.error("❌ Missing image_b64 field")
+            logger.error(f"Available fields: {list(request_data.keys())}")
+            return jsonify({"error": "Missing required field: image_b64"}), 400
+        
+        image_b64 = request_data["image_b64"]
+        logger.info(f"📏 Image base64 length: {len(image_b64) if image_b64 else 0}")
+        logger.info(f"🔍 Image base64 type: {type(image_b64)}")
+        
+        if not image_b64:
+            logger.error("❌ Empty image_b64 field")
+            return jsonify({"error": "image_b64 field is empty"}), 400
+        
+        if not isinstance(image_b64, str):
+            logger.error(f"❌ image_b64 wrong type: {type(image_b64)}")
+            return jsonify({"error": "image_b64 must be a string"}), 400
+        
+        # Check image_b64 length (API limit is 1,148,549 characters)
+        if len(image_b64) > 1148549:
+            logger.error(f"❌ Image too large: {len(image_b64)} > 1,148,549")
+            return jsonify({"error": "image_b64 exceeds maximum length of 1,148,549 characters"}), 400
+        
+        # Basic validation for base64 format
+        logger.info(f"🔍 Base64 preview (first 50 chars): {image_b64[:50]}")
+        
+        # Check if it looks like base64 (basic check)
+        if not image_b64.replace('+', '').replace('/', '').replace('=', '').isalnum():
+            logger.error("❌ Invalid base64 format")
+            return jsonify({"error": "image_b64 appears to be invalid base64 format"}), 400
+        
+        # Prepare request parameters
+        api_url = "https://platform.fatsecret.com/rest/image-recognition/v2"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}"
+        }
+        
+        # Prepare request body
+        recognition_request = {
+            "image_b64": image_b64
+        }
+        
+        # Add optional parameters if provided
+        if "region" in request_data and request_data["region"]:
+            recognition_request["region"] = request_data["region"]
+            
+            # Language is only valid when region is also specified
+            if "language" in request_data and request_data["language"]:
+                recognition_request["language"] = request_data["language"]
+                
+        if "include_food_data" in request_data:
+            recognition_request["include_food_data"] = bool(request_data["include_food_data"])
+        
+        logger.info(f"✅ All validations passed, sending to FatSecret API")
+        logger.info(f"🚀 Request to: {api_url}")
+        logger.info(f"📦 Request keys: {list(recognition_request.keys())}")
+        
+        # Make the API request with retry logic
+        try:
+            response = call_api(api_url, headers, recognition_request)
+            
+            # Parse and return the response
+            json_data = response.json()
+            
+            # Log successful recognition
+            if "food_response" in json_data:
+                food_count = len(json_data["food_response"])
+                logger.info(f"✅ Image recognition successful: {food_count} foods identified")
+            
+            return jsonify(json_data)
+            
+        except requests.RequestException as e:
+            logger.error(f"❌ FatSecret API request failed: {str(e)}")
+            
+            # Try to get more detailed error information
+            error_message = "Image recognition API request failed"
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"❌ FatSecret response status: {e.response.status_code}")
+                logger.error(f"❌ FatSecret response body: {e.response.text}")
+                try:
+                    error_data = e.response.json()
+                    if 'error' in error_data:
+                        error_message = error_data['error'].get('message', error_message)
+                        
+                        # Handle specific error codes
+                        if 'error_code' in error_data['error']:
+                            error_code = error_data['error']['error_code']
+                            if error_code == 211:
+                                error_message = "Image contains only nutrition facts panel - please submit an image of actual food items"
+                            elif error_code in [212, 213]:
+                                error_message = "Invalid image format or corrupted image data"
+                except:
+                    error_message = f"Image recognition failed with status code {e.response.status_code}"
+            
+            return jsonify({"error": error_message}), 500
+            
+    except Exception as e:
+        logger.error(f"❌ Unexpected error in recognize_food_image: {str(e)}")
+        logger.error(f"❌ Exception type: {type(e)}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
 '''
 if __name__ == "__main__":
