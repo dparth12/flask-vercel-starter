@@ -34,7 +34,7 @@ class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True)
-    metadata = db.Column(db.JSON)  # Store user preferences, goals, etc.
+    user_metadata = db.Column(db.JSON)  # Store user preferences, goals, etc.
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class UserDate(db.Model):
@@ -377,7 +377,7 @@ def user_profile(user_id):
                     'data': {
                         'id': user.id,
                         'email': user.email,
-                        'metadata': user.metadata,
+                        'user_metadata': user.user_metadata,
                         'created_at': user.created_at.isoformat() if user.created_at else None
                     }
                 })
@@ -396,8 +396,8 @@ def user_profile(user_id):
             
             if 'email' in data:
                 user.email = data['email']
-            if 'metadata' in data:
-                user.metadata = data['metadata']
+            if 'user_metadata' in data:
+                user.user_metadata = data['user_metadata']
             
             db.session.commit()
             return jsonify({
