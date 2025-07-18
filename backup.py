@@ -1,14 +1,10 @@
 from flask import Flask, request, jsonify
-from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS
 import requests
 import time
 import os
 import logging
 from functools import wraps
 import threading
-import json
-from datetime import datetime, timedelta
 
 # Configure logging
 logging.basicConfig(
@@ -18,47 +14,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)
-
-# Database configuration for users database
-app.config['SQLALCHEMY_DATABASE_URI'] = (
-    f"mysql+pymysql://d1aw3da2dw9ad:vyZdud-nyrcuc-3nujbo"
-    f"@database-1.cl2ukiocupsl.us-east-2.rds.amazonaws.com/users"
-)
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-db = SQLAlchemy(app)
-
-# Database Models
-class User(db.Model):
-    __tablename__ = 'users'
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(255), unique=True)
-    metadata = db.Column(db.JSON)  # Store user preferences, goals, etc.
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-class UserDate(db.Model):
-    __tablename__ = 'user_dates'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    date = db.Column(db.Date, nullable=False)
-    meals = db.Column(db.JSON)  # Store all meals for the day
-    notes = db.Column(db.Text)
-    water_intake = db.Column(db.Integer, default=0)
-    weight = db.Column(db.Numeric(5,2))
-    day_aggregates = db.Column(db.JSON)  # Store calculated totals
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    __table_args__ = (db.UniqueConstraint('user_id', 'date', name='unique_user_date'),)
-
-class FoodCache(db.Model):
-    __tablename__ = 'food_cache'
-    food_id = db.Column(db.String(100), primary_key=True)
-    serving_id = db.Column(db.String(100))
-    data = db.Column(db.JSON)
-    expires_at = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # FatSecret API credentials
 CLIENT_ID = os.getenv('CLIENT_ID')
@@ -75,6 +30,7 @@ token_info = {
 TOKEN_REFRESH_THRESHOLD = 3600  # Refresh token if less than 1 hour remaining (in seconds)
 MAX_RETRIES = 3
 RETRY_DELAY = 2  # seconds
+
 
 def get_token(force_refresh=False):
     """Get a valid access token, refreshing if necessary"""
@@ -99,6 +55,7 @@ def get_token(force_refresh=False):
     
     return token_info["access_token"]
 
+
 def refresh_token_with_retry():
     """Refresh the access token with retry logic"""
     for attempt in range(MAX_RETRIES):
@@ -115,6 +72,7 @@ def refresh_token_with_retry():
             else:
                 logger.error("All token refresh attempts failed")
                 raise
+
 
 def refresh_token():
     """Request a new access token from FatSecret API"""
@@ -151,6 +109,7 @@ def refresh_token():
         logger.error(f"Error refreshing token: {str(e)}")
         raise
 
+
 def schedule_token_refresh(expires_in):
     """Schedule a background token refresh before the token expires"""
     refresh_time = expires_in - TOKEN_REFRESH_THRESHOLD
@@ -169,6 +128,7 @@ def schedule_token_refresh(expires_in):
         thread.start()
         logger.info(f"Scheduled token refresh in {refresh_time} seconds")
 
+
 def token_required(f):
     """Decorator to ensure a valid token is available"""
     @wraps(f)
@@ -176,6 +136,52 @@ def token_required(f):
         token = get_token()
         return f(token, *args, **kwargs)
     return decorated
+
+
+# def call_api(url, headers, params):
+#     """Call FatSecret API with retry logic for failures"""
+#     for attempt in range(MAX_RETRIES):
+#         try:
+#             logger.info(f"API request attempt {attempt + 1}")
+            
+#             response = requests.post(url, headers=headers, data=params)
+#             logger.info(f"Response status: {response.status_code}")
+            
+#             # Check for API error responses even with 200 status
+#             if response.status_code == 200 and '"error"' in response.text:
+#                 error_json = response.json()
+#                 if 'error' in error_json:
+#                     error_msg = error_json['error'].get('message', 'Unknown API error')
+                    
+#                     # If token is invalid, refresh and retry
+#                     if 'token is invalid' in error_msg.lower():
+#                         if attempt < MAX_RETRIES - 1:
+#                             logger.warning("Invalid token detected, refreshing token and retrying...")
+#                             headers["Authorization"] = f"Bearer {get_token(force_refresh=True)}"
+#                             continue
+                    
+#                     raise Exception(f"API error: {error_msg}")
+            
+#             response.raise_for_status()
+#             return response
+            
+#         except requests.RequestException as e:
+#             logger.error(f"Request failed on attempt {attempt + 1}: {str(e)}")
+            
+#             # Retry only for certain errors
+#             if attempt < MAX_RETRIES - 1:
+#                 # Check if we need to refresh token
+#                 if hasattr(e, 'response') and e.response is not None:
+#                     if e.response.status_code in (401, 403):
+#                         logger.warning("Authentication error, refreshing token before retry")
+#                         headers["Authorization"] = f"Bearer {get_token(force_refresh=True)}"
+                
+#                 wait_time = RETRY_DELAY * (2 ** attempt)  # Exponential backoff
+#                 logger.info(f"Retrying in {wait_time} seconds...")
+#                 time.sleep(wait_time)
+#             else:
+#                 logger.error("All API request attempts failed")
+#                 raise
 
 def call_api(url, headers, params):
     """Call FatSecret API with retry logic for failures"""
@@ -238,221 +244,6 @@ def call_api(url, headers, params):
                 logger.error("All API request attempts failed")
                 raise
 
-# ===============================
-# NUTRITION TRACKING API ROUTES
-# ===============================
-
-@app.route("/api/nutrition/user/<int:user_id>/date/<string:date>", methods=['GET', 'PUT'])
-def user_date_data(user_id, date):
-    """Get or update all nutrition data for a specific user and date"""
-    try:
-        if request.method == 'GET':
-            user_date = UserDate.query.filter_by(user_id=user_id, date=date).first()
-            if user_date:
-                return jsonify({
-                    'success': True,
-                    'data': {
-                        'id': user_date.id,
-                        'user_id': user_date.user_id,
-                        'date': user_date.date.isoformat() if user_date.date else None,
-                        'meals': user_date.meals or [],
-                        'notes': user_date.notes or '',
-                        'water_intake': user_date.water_intake or 0,
-                        'weight': float(user_date.weight) if user_date.weight else None,
-                        'day_aggregates': user_date.day_aggregates or {},
-                        'updated_at': user_date.updated_at.isoformat() if user_date.updated_at else None
-                    }
-                })
-            else:
-                # Return empty data structure for new dates
-                return jsonify({
-                    'success': True,
-                    'data': {
-                        'user_id': user_id,
-                        'date': date,
-                        'meals': [],
-                        'notes': '',
-                        'water_intake': 0,
-                        'weight': None,
-                        'day_aggregates': {}
-                    }
-                })
-        
-        elif request.method == 'PUT':
-            data = request.json
-            if not data:
-                return jsonify({'error': 'No data provided'}), 400
-            
-            user_date = UserDate.query.filter_by(user_id=user_id, date=date).first()
-            
-            if not user_date:
-                user_date = UserDate(user_id=user_id, date=date)
-                db.session.add(user_date)
-            
-            # Update fields if provided
-            if 'meals' in data:
-                user_date.meals = data['meals']
-            if 'notes' in data:
-                user_date.notes = data['notes']
-            if 'water_intake' in data:
-                user_date.water_intake = data['water_intake']
-            if 'weight' in data:
-                user_date.weight = data['weight']
-            if 'day_aggregates' in data:
-                user_date.day_aggregates = data['day_aggregates']
-            
-            user_date.updated_at = datetime.utcnow()
-            db.session.commit()
-            
-            return jsonify({
-                'success': True,
-                'message': 'Data updated successfully'
-            })
-            
-    except Exception as e:
-        logger.error(f"Error in user_date_data: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route("/api/nutrition/food/<string:food_id>", methods=['GET'])
-def get_cached_food_data(food_id):
-    """Get food data with caching - Returns data compatible with your React Native app"""
-    try:
-        # Check cache first
-        cached_food = FoodCache.query.filter_by(food_id=food_id).first()
-        
-        if cached_food and cached_food.expires_at > datetime.utcnow():
-            logger.info(f"Returning cached food data for {food_id}")
-            return jsonify(cached_food.data)  # Return cached data directly (no wrapper)
-        
-        # If not cached or expired, fetch fresh data from FatSecret
-        logger.info(f"Fetching fresh food data for {food_id}")
-        
-        # Use your existing get_food function logic
-        token = get_token()
-        api_url = "https://platform.fatsecret.com/rest/server.api"
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Authorization": f"Bearer {token}"
-        }
-        
-        params = {
-            "method": "food.get",
-            "food_id": food_id,
-            "format": "json"
-        }
-        
-        response = call_api(api_url, headers, params)
-        fresh_data = response.json()
-        
-        # Cache the result for 24 hours
-        if cached_food:
-            cached_food.data = fresh_data
-            cached_food.expires_at = datetime.utcnow() + timedelta(hours=24)
-        else:
-            cached_food = FoodCache(
-                food_id=food_id,
-                data=fresh_data,
-                expires_at=datetime.utcnow() + timedelta(hours=24)
-            )
-            db.session.add(cached_food)
-        
-        db.session.commit()
-        
-        # Return data in the exact same format as FatSecret API
-        return jsonify(fresh_data)
-        
-    except Exception as e:
-        logger.error(f"Error in get_cached_food_data: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route("/api/nutrition/user/<int:user_id>", methods=['GET', 'POST', 'PUT'])
-def user_profile(user_id):
-    """Get or update user profile data"""
-    try:
-        if request.method == 'GET':
-            user = User.query.get(user_id)
-            if user:
-                return jsonify({
-                    'success': True,
-                    'data': {
-                        'id': user.id,
-                        'email': user.email,
-                        'metadata': user.metadata,
-                        'created_at': user.created_at.isoformat() if user.created_at else None
-                    }
-                })
-            return jsonify({'error': 'User not found'}), 404
-        
-        elif request.method in ['POST', 'PUT']:
-            data = request.json
-            if not data:
-                return jsonify({'error': 'No data provided'}), 400
-            
-            user = User.query.get(user_id)
-            if not user:
-                # Create new user
-                user = User(id=user_id)
-                db.session.add(user)
-            
-            if 'email' in data:
-                user.email = data['email']
-            if 'metadata' in data:
-                user.metadata = data['metadata']
-            
-            db.session.commit()
-            return jsonify({
-                'success': True,
-                'message': 'User profile updated successfully'
-            })
-            
-    except Exception as e:
-        logger.error(f"Error in user_profile: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route("/api/nutrition/user/<int:user_id>/dates", methods=['GET'])
-def user_date_list(user_id):
-    """Get list of dates with data for a user"""
-    try:
-        # Get optional date range parameters
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
-        limit = request.args.get('limit', 30)
-        
-        query = UserDate.query.filter_by(user_id=user_id)
-        
-        if start_date:
-            query = query.filter(UserDate.date >= start_date)
-        if end_date:
-            query = query.filter(UserDate.date <= end_date)
-        
-        user_dates = query.order_by(UserDate.date.desc()).limit(limit).all()
-        
-        dates_data = []
-        for user_date in user_dates:
-            dates_data.append({
-                'date': user_date.date.isoformat(),
-                'has_meals': bool(user_date.meals and len(user_date.meals) > 0),
-                'has_notes': bool(user_date.notes),
-                'water_intake': user_date.water_intake or 0,
-                'weight': float(user_date.weight) if user_date.weight else None,
-                'day_aggregates': user_date.day_aggregates or {},
-                'updated_at': user_date.updated_at.isoformat() if user_date.updated_at else None
-            })
-        
-        return jsonify({
-            'success': True,
-            'data': dates_data,
-            'count': len(dates_data)
-        })
-        
-    except Exception as e:
-        logger.error(f"Error in user_date_list: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-# ===============================
-# EXISTING FATSECRET API ROUTES
-# ===============================
-
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
@@ -501,6 +292,7 @@ def search_food(token):
         logger.error(f"Error in search_food: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+
 @app.route("/api/food/get", methods=["GET"])
 @token_required
 def get_food(token):
@@ -539,6 +331,7 @@ def get_food(token):
     except Exception as e:
         logger.error(f"Error in get_food: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/food/barcode", methods=["GET"])
 @token_required
@@ -647,6 +440,7 @@ def find_food_by_barcode(token):
         logger.error(f"Error in find_food_by_barcode: {str(e)}")
         return jsonify({"error": str(e), "barcode": barcode}), 500
 
+
 def convert_upce_to_gtin13(upce, number_system='0'):
     """Convert UPC-E (6-digit) to GTIN-13 using number system and calculated check digit"""
     if len(upce) != 6:
@@ -670,6 +464,7 @@ def convert_upce_to_gtin13(upce, number_system='0'):
     full_upca = upca11 + check_digit
     return full_upca.zfill(13)
 
+
 def calculate_upc_check_digit(upc11):
     """Calculate the 12th digit (check digit) for a UPC-A code"""
     if len(upc11) != 11 or not upc11.isdigit():
@@ -680,6 +475,7 @@ def calculate_upc_check_digit(upc11):
     total = (odd_sum * 3) + even_sum
     check_digit = (10 - (total % 10)) % 10
     return str(check_digit)
+
 
 @app.route("/api/food/barcode/debug", methods=["GET"])
 @token_required
@@ -761,28 +557,19 @@ def debug_barcode(token):
         }
     })
 
+
 @app.route("/", methods=["GET"])
 def home():
     """API home/info page"""
     return jsonify({
-        "name": "FatSecret API Server + Nutrition Tracker",
-        "description": "A Flask server that provides access to FatSecret API and nutrition tracking",
+        "name": "FatSecret API Server",
+        "description": "A Flask server that provides access to FatSecret API",
         "endpoints": {
-            # Existing FatSecret endpoints
             "/api/foods/search": "Search for foods by name",
             "/api/food/get": "Get detailed information about a specific food by ID",
             "/api/food/barcode": "Find food information using a barcode",
             "/api/food/barcode/debug": "Debug endpoint for barcode lookup",
-            "/api/food/nlp": "Process natural language food descriptions (POST)",
-            "/api/text-to-food": "Analyze text description of foods (POST)",
-            "/api/food/image-recognition": "Identify food items from images (POST)",
-            "/api/foods/autocomplete": "Autocomplete food search suggestions",
-            
-            # New nutrition tracking endpoints
-            "/api/nutrition/user/<user_id>": "Get or update user profile",
-            "/api/nutrition/user/<user_id>/date/<date>": "Get or update nutrition data for a specific date",
-            "/api/nutrition/user/<user_id>/dates": "Get list of dates with data",
-            "/api/nutrition/food/<food_id>": "Get cached food data"
+            "/api/food/nlp": "Process natural language food descriptions (POST)"
         },
         "status": "Token is " + ("active" if token_info["access_token"] else "not initialized"),
         "expires_in": max(0, int(token_info["expiry_time"] - time.time())) if token_info["expiry_time"] else 0
@@ -1231,14 +1018,6 @@ def recognize_food_image(token):
         import traceback
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
-
-# Create database tables
-with app.app_context():
-    try:
-        db.create_all()
-        logger.info("✅ Database tables created successfully!")
-    except Exception as e:
-        logger.error(f"❌ Error creating database tables: {str(e)}")
 
 '''
 if __name__ == "__main__":
