@@ -242,7 +242,7 @@ def call_api(url, headers, params):
 # NUTRITION TRACKING API ROUTES
 # ===============================
 
-@app.route("/api/nutrition/user/<int:user_id>/date/<string:date>", methods=['GET', 'PUT'])
+@app.route("/api/nutrition/user/<string:user_id>/date/<string:date>", methods=['GET', 'PUT'])
 def user_date_data(user_id, date):
     """Get or update all nutrition data for a specific user and date"""
     try:
@@ -1231,56 +1231,6 @@ def recognize_food_image(token):
         import traceback
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
-@app.route('/api/nutrition/user/<int:user_id>/date/<string:date>', methods=['GET', 'PUT'])
-def user_date_data(user_id, date):
-    if request.method == 'GET':
-        # Auto-create user if they don't exist
-        user = User.query.get(user_id)
-        if not user:
-            user = User(id=user_id, email=f"user_{user_id}@temp.com")
-            db.session.add(user)
-            db.session.commit()
-            print(f"✅ Auto-created user {user_id}")
-        
-        user_date = UserDate.query.filter_by(user_id=user_id, date=date).first()
-        if user_date:
-            return jsonify({
-                'success': True,
-                'data': {
-                    'id': user_date.id,
-                    'user_id': user_date.user_id,
-                    'date': user_date.date.isoformat() if user_date.date else None,
-                    'meals': user_date.meals or [],
-                    'notes': user_date.notes or '',
-                    'water_intake': user_date.water_intake or 0,
-                    'weight': float(user_date.weight) if user_date.weight else None,
-                    'day_aggregates': user_date.day_aggregates or {},
-                    'updated_at': user_date.updated_at.isoformat() if user_date.updated_at else None
-                }
-            })
-        else:
-            # Return empty data structure for new dates
-            return jsonify({
-                'success': True,
-                'data': {
-                    'user_id': user_id,
-                    'date': date,
-                    'meals': [],
-                    'notes': '',
-                    'water_intake': 0,
-                    'weight': None,
-                    'day_aggregates': {}
-                }
-            })
-    
-    elif request.method == 'PUT':
-        # Auto-create user if they don't exist
-        user = User.query.get(user_id)
-        if not user:
-            user = User(id=user_id, email=f"user_{user_id}@temp.com")
-            db.session.add(user)
-            db.session.commit()
-            print(f"✅ Auto-created user {user_id}")
 
 # Create database tables
 with app.app_context():
