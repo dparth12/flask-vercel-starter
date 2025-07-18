@@ -32,7 +32,7 @@ db = SQLAlchemy(app)
 # Database Models
 class User(db.Model):
     __tablename__ = 'users'
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.String(255), primary_key=True)  # FIXED: Changed to String for Clerk IDs
     email = db.Column(db.String(255), unique=True)
     user_metadata = db.Column(db.JSON)  # Store user preferences, goals, etc.
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -40,7 +40,7 @@ class User(db.Model):
 class UserDate(db.Model):
     __tablename__ = 'user_dates'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.String(255), db.ForeignKey('users.id'), nullable=False)  # FIXED: Changed to String
     date = db.Column(db.Date, nullable=False)
     meals = db.Column(db.JSON)  # Store all meals for the day
     notes = db.Column(db.Text)
@@ -239,7 +239,7 @@ def call_api(url, headers, params):
                 raise
 
 # ===============================
-# NUTRITION TRACKING API ROUTES
+# NUTRITION TRACKING API ROUTES (FIXED)
 # ===============================
 
 @app.route("/api/nutrition/user/<string:user_id>/date/<string:date>", methods=['GET', 'PUT'])
@@ -247,6 +247,14 @@ def user_date_data(user_id, date):
     """Get or update all nutrition data for a specific user and date"""
     try:
         if request.method == 'GET':
+            # Auto-create user if they don't exist
+            user = User.query.get(user_id)
+            if not user:
+                user = User(id=user_id, email=f"user_{user_id}@temp.com")
+                db.session.add(user)
+                db.session.commit()
+                logger.info(f"✅ Auto-created user {user_id}")
+                
             user_date = UserDate.query.filter_by(user_id=user_id, date=date).first()
             if user_date:
                 return jsonify({
@@ -279,6 +287,14 @@ def user_date_data(user_id, date):
                 })
         
         elif request.method == 'PUT':
+            # Auto-create user if they don't exist
+            user = User.query.get(user_id)
+            if not user:
+                user = User(id=user_id, email=f"user_{user_id}@temp.com")
+                db.session.add(user)
+                db.session.commit()
+                logger.info(f"✅ Auto-created user {user_id}")
+                
             data = request.json
             if not data:
                 return jsonify({'error': 'No data provided'}), 400
@@ -365,7 +381,7 @@ def get_cached_food_data(food_id):
         logger.error(f"Error in get_cached_food_data: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route("/api/nutrition/user/<int:user_id>", methods=['GET', 'POST', 'PUT'])
+@app.route("/api/nutrition/user/<string:user_id>", methods=['GET', 'POST', 'PUT'])
 def user_profile(user_id):
     """Get or update user profile data"""
     try:
@@ -409,7 +425,7 @@ def user_profile(user_id):
         logger.error(f"Error in user_profile: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route("/api/nutrition/user/<int:user_id>/dates", methods=['GET'])
+@app.route("/api/nutrition/user/<string:user_id>/dates", methods=['GET'])
 def user_date_list(user_id):
     """Get list of dates with data for a user"""
     try:
@@ -450,7 +466,7 @@ def user_date_list(user_id):
         return jsonify({'error': str(e)}), 500
 
 # ===============================
-# EXISTING FATSECRET API ROUTES
+# EXISTING FATSECRET API ROUTES (ALL PRESERVED)
 # ===============================
 
 @app.route("/health", methods=["GET"])
@@ -728,10 +744,7 @@ def debug_barcode(token):
             # Call API directly without retry for debugging
             response = requests.post(api_url, headers=headers, data=params)
             
-            # Get raw response text
-            response_text = response.text
-            
-            # Try to parse as JSON if possible
+# Try to parse as JSON if possible
             try:
                 response_json = response.json()
                 results.append({
@@ -744,7 +757,7 @@ def debug_barcode(token):
                 results.append({
                     "barcode": test_barcode,
                     "status_code": response.status_code,
-                    "response_text": response_text
+                    "response_text": response.text
                 })
                 
         except Exception as e:
@@ -759,33 +772,6 @@ def debug_barcode(token):
             "token_active": token_info["access_token"] is not None,
             "expires_in": max(0, int(token_info["expiry_time"] - time.time())) if token_info["expiry_time"] else 0
         }
-    })
-
-@app.route("/", methods=["GET"])
-def home():
-    """API home/info page"""
-    return jsonify({
-        "name": "FatSecret API Server + Nutrition Tracker",
-        "description": "A Flask server that provides access to FatSecret API and nutrition tracking",
-        "endpoints": {
-            # Existing FatSecret endpoints
-            "/api/foods/search": "Search for foods by name",
-            "/api/food/get": "Get detailed information about a specific food by ID",
-            "/api/food/barcode": "Find food information using a barcode",
-            "/api/food/barcode/debug": "Debug endpoint for barcode lookup",
-            "/api/food/nlp": "Process natural language food descriptions (POST)",
-            "/api/text-to-food": "Analyze text description of foods (POST)",
-            "/api/food/image-recognition": "Identify food items from images (POST)",
-            "/api/foods/autocomplete": "Autocomplete food search suggestions",
-            
-            # New nutrition tracking endpoints
-            "/api/nutrition/user/<user_id>": "Get or update user profile",
-            "/api/nutrition/user/<user_id>/date/<date>": "Get or update nutrition data for a specific date",
-            "/api/nutrition/user/<user_id>/dates": "Get list of dates with data",
-            "/api/nutrition/food/<food_id>": "Get cached food data"
-        },
-        "status": "Token is " + ("active" if token_info["access_token"] else "not initialized"),
-        "expires_in": max(0, int(token_info["expiry_time"] - time.time())) if token_info["expiry_time"] else 0
     })
 
 @app.route("/api/food/nlp", methods=["POST"])
@@ -902,7 +888,7 @@ def process_food_text(token):
     except Exception as e:
         logger.error(f"Error in process_food_text: {str(e)}")
         return jsonify({"error": str(e)}), 500
-    
+
 @app.route("/api/foods/autocomplete", methods=["GET"])
 @token_required
 def autocomplete_food(token):
@@ -1107,7 +1093,7 @@ def text_to_food_analysis(token):
             "error": str(e),
             "details": str(e) if app.debug else None
         }), 500
-    
+
 @app.route("/api/food/image-recognition", methods=["POST"])
 @token_required
 def recognize_food_image(token):
@@ -1231,6 +1217,33 @@ def recognize_food_image(token):
         import traceback
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
+@app.route("/", methods=["GET"])
+def home():
+    """API home/info page"""
+    return jsonify({
+        "name": "FatSecret API Server + Nutrition Tracker",
+        "description": "A Flask server that provides access to FatSecret API and nutrition tracking",
+        "endpoints": {
+            # Existing FatSecret endpoints
+            "/api/foods/search": "Search for foods by name",
+            "/api/food/get": "Get detailed information about a specific food by ID",
+            "/api/food/barcode": "Find food information using a barcode",
+            "/api/food/barcode/debug": "Debug endpoint for barcode lookup",
+            "/api/food/nlp": "Process natural language food descriptions (POST)",
+            "/api/text-to-food": "Analyze text description of foods (POST)",
+            "/api/food/image-recognition": "Identify food items from images (POST)",
+            "/api/foods/autocomplete": "Autocomplete food search suggestions",
+            
+            # New nutrition tracking endpoints
+            "/api/nutrition/user/<user_id>": "Get or update user profile",
+            "/api/nutrition/user/<user_id>/date/<date>": "Get or update nutrition data for a specific date",
+            "/api/nutrition/user/<user_id>/dates": "Get list of dates with data",
+            "/api/nutrition/food/<food_id>": "Get cached food data"
+        },
+        "status": "Token is " + ("active" if token_info["access_token"] else "not initialized"),
+        "expires_in": max(0, int(token_info["expiry_time"] - time.time())) if token_info["expiry_time"] else 0
+    })
 
 # Create database tables
 with app.app_context():
