@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, current_app
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import requests
@@ -1217,6 +1217,224 @@ def recognize_food_image(token):
         import traceback
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+@app.route('/api/nutrition/user/<string:user_id>/meal/<int:meal_id>/food', methods=['POST'])
+def add_food_to_meal(user_id, meal_id):
+    try:
+        data = request.get_json()
+        
+        # Find the user's date record
+        user_date = UserDate.query.filter_by(user_id=user_id).first()
+        if not user_date:
+            return jsonify({'success': False, 'error': 'User date not found'}), 404
+        
+        meals = user_date.meals or []
+        
+        # Find the meal and add food item
+        for meal in meals:
+            if meal.get('id') == meal_id:
+                if 'food_items' not in meal:
+                    meal['food_items'] = []
+                
+                # Generate new food item ID
+                new_id = max([item.get('id', 0) for item in meal['food_items']], default=0) + 1
+                food_item = {
+                    'id': new_id,
+                    'meal_id': meal_id,
+                    **data
+                }
+                meal['food_items'].append(food_item)
+                break
+        
+        user_date.meals = meals
+        user_date.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({'success': True, 'data': food_item})
+        
+    except Exception as e:
+        print(f"Error adding food item: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# 2. Delete Food Item from Meal
+@app.route('/api/nutrition/user/<string:user_id>/meal/<int:meal_id>/food/<int:item_id>', methods=['DELETE'])
+def delete_food_from_meal(user_id, meal_id, item_id):
+    try:
+        user_date = UserDate.query.filter_by(user_id=user_id).first()
+        if not user_date:
+            return jsonify({'success': False, 'error': 'User date not found'}), 404
+        
+        meals = user_date.meals or []
+        
+        # Find the meal and remove food item
+        for meal in meals:
+            if meal.get('id') == meal_id:
+                if 'food_items' in meal:
+                    meal['food_items'] = [
+                        item for item in meal['food_items'] 
+                        if item.get('id') != item_id
+                    ]
+                break
+        
+        user_date.meals = meals
+        user_date.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"Error deleting food item: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# 3. Delete Multiple Food Items (Batch Delete)
+@app.route('/api/nutrition/user/<string:user_id>/food/batch-delete', methods=['DELETE'])
+def batch_delete_food_items(user_id):
+    try:
+        data = request.get_json()
+        item_ids = data.get('itemIds', [])
+        
+        user_date = UserDate.query.filter_by(user_id=user_id).first()
+        if not user_date:
+            return jsonify({'success': False, 'error': 'User date not found'}), 404
+        
+        meals = user_date.meals or []
+        
+        # Remove items from all meals
+        for meal in meals:
+            if 'food_items' in meal:
+                meal['food_items'] = [
+                    item for item in meal['food_items'] 
+                    if item.get('id') not in item_ids
+                ]
+        
+        user_date.meals = meals
+        user_date.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"Error batch deleting food items: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# 4. Delete Meal
+@app.route('/api/nutrition/user/<string:user_id>/meal/<int:meal_id>', methods=['DELETE'])
+def delete_meal(user_id, meal_id):
+    try:
+        user_date = UserDate.query.filter_by(user_id=user_id).first()
+        if not user_date:
+            return jsonify({'success': False, 'error': 'User date not found'}), 404
+        
+        meals = user_date.meals or []
+        
+        # Remove the meal
+        meals = [meal for meal in meals if meal.get('id') != meal_id]
+        
+        user_date.meals = meals
+        user_date.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"Error deleting meal: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# 5. Copy Food Items Between Meals
+@app.route('/api/nutrition/user/<string:user_id>/meal/<int:to_meal_id>/copy', methods=['POST'])
+def copy_food_items(user_id, to_meal_id):
+    try:
+        data = request.get_json()
+        from_meal_id = data.get('fromMealId')
+        
+        user_date = UserDate.query.filter_by(user_id=user_id).first()
+        if not user_date:
+            return jsonify({'success': False, 'error': 'User date not found'}), 404
+        
+        meals = user_date.meals or []
+        from_meal = None
+        to_meal = None
+        
+        # Find both meals
+        for meal in meals:
+            if meal.get('id') == from_meal_id:
+                from_meal = meal
+            elif meal.get('id') == to_meal_id:
+                to_meal = meal
+        
+        if not from_meal or not to_meal:
+            return jsonify({'success': False, 'error': 'Meals not found'}), 404
+        
+        # Copy food items
+        if 'food_items' in from_meal:
+            if 'food_items' not in to_meal:
+                to_meal['food_items'] = []
+            
+            # Generate new IDs for copied items
+            existing_ids = [item.get('id', 0) for item in to_meal['food_items']]
+            next_id = max(existing_ids, default=0) + 1
+            
+            for item in from_meal['food_items']:
+                copied_item = {
+                    **item,
+                    'id': next_id,
+                    'meal_id': to_meal_id
+                }
+                to_meal['food_items'].append(copied_item)
+                next_id += 1
+        
+        user_date.meals = meals
+        user_date.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        print(f"Error copying food items: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# 6. Get Serving Sizes for Food (Reuses your existing FatSecret integration)
+@app.route('/api/nutrition/food/<int:food_id>/servings', methods=['GET'])
+def get_serving_sizes(food_id):
+    try:
+        user_id = request.args.get('userId')
+        
+        # Check cache first
+        cached_food = FoodCache.query.filter_by(food_id=food_id).first()
+        if cached_food and cached_food.serving_sizes:
+            return jsonify({'success': True, 'data': cached_food.serving_sizes})
+        
+        # Use your existing /api/food/get endpoint internally
+        with current_app.test_client() as client:
+            response = client.get(f'/api/food/get?food_id={food_id}')
+            if response.status_code == 200:
+                food_data = response.get_json()
+                servings = food_data.get('food', {}).get('servings', {}).get('serving', [])
+                
+                # Ensure it's a list
+                if not isinstance(servings, list):
+                    servings = [servings] if servings else []
+                
+                # Cache for future use
+                if servings:
+                    if cached_food:
+                        cached_food.serving_sizes = servings
+                        cached_food.updated_at = datetime.utcnow()
+                    else:
+                        cached_food = FoodCache(
+                            food_id=food_id,
+                            serving_sizes=servings,
+                            created_at=datetime.utcnow()
+                        )
+                        db.session.add(cached_food)
+                    db.session.commit()
+                
+                return jsonify({'success': True, 'data': servings})
+        
+        return jsonify({'success': False, 'error': 'Food not found'}), 404
+        
+    except Exception as e:
+        print(f"Error getting serving sizes: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route("/", methods=["GET"])
 def home():
