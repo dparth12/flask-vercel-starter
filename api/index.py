@@ -60,6 +60,70 @@ class FoodCache(db.Model):
     expires_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+# Add these models after your existing FoodCache model
+class FoodItemLegacy(db.Model):
+    __tablename__ = 'food_items_legacy'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.String(255), nullable=False, index=True)
+    meal_id = db.Column(db.BigInteger, nullable=False, index=True)
+    food_id = db.Column(db.String(255), nullable=False)
+    serving_id = db.Column(db.String(255), nullable=False)
+    servings = db.Column(db.Numeric(10, 2), default=1)
+    
+    # Full nutrition data stored
+    foodname = db.Column(db.String(500))
+    brandname = db.Column(db.String(500))
+    calories = db.Column(db.Numeric(10, 2), default=0)
+    carbs = db.Column(db.Numeric(10, 2), default=0)
+    protein = db.Column(db.Numeric(10, 2), default=0)
+    fats = db.Column(db.Numeric(10, 2), default=0)
+    saturated_fat = db.Column(db.Numeric(10, 2), default=0)
+    cholesterol = db.Column(db.Numeric(10, 2), default=0)
+    sodium = db.Column(db.Numeric(10, 2), default=0)
+    dietary_fiber = db.Column(db.Numeric(10, 2), default=0)
+    sugar = db.Column(db.Numeric(10, 2), default=0)
+    potassium = db.Column(db.Numeric(10, 2), default=0)
+    trans_fat = db.Column(db.Numeric(10, 2), default=0)
+    mono_fat = db.Column(db.Numeric(10, 2), default=0)
+    poly_fat = db.Column(db.Numeric(10, 2), default=0)
+    vit_a = db.Column(db.Numeric(10, 2), default=0)
+    vit_c = db.Column(db.Numeric(10, 2), default=0)
+    vit_d = db.Column(db.Numeric(10, 2), default=0)
+    net_carbs = db.Column(db.Numeric(10, 2), default=0)
+    sugar_alc = db.Column(db.Numeric(10, 2), default=0)
+    sugar_added = db.Column(db.Numeric(10, 2), default=0)
+    iron = db.Column(db.Numeric(10, 2), default=0)
+    calcium = db.Column(db.Numeric(10, 2), default=0)
+    serving_qty = db.Column(db.Numeric(10, 2), default=1)
+    serving_unit = db.Column(db.String(255))
+    nutrition_multiplier = db.Column(db.Numeric(10, 2), default=1.0)
+    verified = db.Column(db.Boolean, default=False)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        db.Index('idx_legacy_user_meal', 'user_id', 'meal_id'),
+    )
+
+class FoodItemCompliant(db.Model):
+    __tablename__ = 'food_items_compliant'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.String(255), nullable=False, index=True)
+    meal_id = db.Column(db.BigInteger, nullable=False, index=True)
+    food_id = db.Column(db.String(255), nullable=False)
+    serving_id = db.Column(db.String(255), nullable=False)
+    servings = db.Column(db.Numeric(10, 2), default=1)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        db.Index('idx_compliant_user_meal', 'user_id', 'meal_id'),
+    )
+
 # FatSecret API credentials
 CLIENT_ID = os.getenv('CLIENT_ID')
 CLIENT_SECRET = os.getenv('CLIENT_SECRET')
@@ -1434,6 +1498,182 @@ def get_serving_sizes(food_id):
         
     except Exception as e:
         print(f"Error getting serving sizes: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+# NEW: Separate table food management routes
+@app.route('/api/nutrition/user/<string:user_id>/meal/<int:meal_id>/food/legacy', methods=['POST'])
+def add_legacy_food_item(user_id, meal_id):
+    """Add a legacy food item (full nutrition data stored)"""
+    try:
+        data = request.json or {}
+        
+        # Create legacy food item
+        food_item = FoodItemLegacy(
+            user_id=user_id,
+            meal_id=meal_id,
+            food_id=data.get('food_id', ''),
+            serving_id=data.get('serving_id', ''),
+            servings=float(data.get('servings', 1)),
+            foodname=data.get('foodname', ''),
+            brandname=data.get('brandname', ''),
+            calories=float(data.get('calories', 0)),
+            carbs=float(data.get('carbs', 0)),
+            protein=float(data.get('protein', 0)),
+            fats=float(data.get('fats', 0)),
+            saturated_fat=float(data.get('saturated_fat', 0)),
+            cholesterol=float(data.get('cholesterol', 0)),
+            sodium=float(data.get('sodium', 0)),
+            dietary_fiber=float(data.get('dietary_fiber', 0)),
+            sugar=float(data.get('sugar', 0)),
+            potassium=float(data.get('potassium', 0)),
+            trans_fat=float(data.get('trans_fat', 0)),
+            mono_fat=float(data.get('mono_fat', 0)),
+            poly_fat=float(data.get('poly_fat', 0)),
+            vit_a=float(data.get('vit_a', 0)),
+            vit_c=float(data.get('vit_c', 0)),
+            vit_d=float(data.get('vit_d', 0)),
+            net_carbs=float(data.get('net_carbs', 0)),
+            sugar_alc=float(data.get('sugar_alc', 0)),
+            sugar_added=float(data.get('sugar_added', 0)),
+            iron=float(data.get('iron', 0)),
+            calcium=float(data.get('calcium', 0)),
+            serving_qty=float(data.get('serving_qty', 1)),
+            serving_unit=data.get('serving_unit', ''),
+            nutrition_multiplier=float(data.get('nutrition_multiplier', 1.0)),
+            verified=bool(data.get('verified', False))
+        )
+        
+        db.session.add(food_item)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Legacy food item added successfully',
+            'item_id': food_item.id
+        })
+    
+    except Exception as e:
+        logger.error(f"Error adding legacy food item: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/nutrition/user/<string:user_id>/meal/<int:meal_id>/food/compliant', methods=['POST'])
+def add_compliant_food_item(user_id, meal_id):
+    """Add a compliant food item (IDs only - nutrition from FatSecret API)"""
+    try:
+        data = request.json or {}
+        
+        # Create compliant food item
+        food_item = FoodItemCompliant(
+            user_id=user_id,
+            meal_id=meal_id,
+            food_id=data.get('food_id', ''),
+            serving_id=data.get('serving_id', ''),
+            servings=float(data.get('servings', 1))
+        )
+        
+        db.session.add(food_item)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Compliant food item added successfully',
+            'item_id': food_item.id
+        })
+    
+    except Exception as e:
+        logger.error(f"Error adding compliant food item: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/nutrition/user/<string:user_id>/meal/<int:meal_id>/foods', methods=['GET'])
+def get_meal_food_items(user_id, meal_id):
+    """Get all food items for a meal (both legacy and compliant)"""
+    try:
+        # Get legacy food items
+        legacy_items = FoodItemLegacy.query.filter_by(
+            user_id=user_id, 
+            meal_id=meal_id
+        ).all()
+        
+        # Get compliant food items
+        compliant_items = FoodItemCompliant.query.filter_by(
+            user_id=user_id, 
+            meal_id=meal_id
+        ).all()
+        
+        # Format legacy items
+        legacy_data = []
+        for item in legacy_items:
+            legacy_data.append({
+                'id': item.id,
+                'type': 'legacy',
+                'food_id': item.food_id,
+                'serving_id': item.serving_id,
+                'servings': float(item.servings),
+                'foodname': item.foodname,
+                'brandname': item.brandname,
+                'calories': float(item.calories),
+                'carbs': float(item.carbs),
+                'protein': float(item.protein),
+                'fats': float(item.fats),
+                'created_at': item.created_at.isoformat()
+            })
+        
+        # Format compliant items (nutrition will be fetched from FatSecret API)
+        compliant_data = []
+        for item in compliant_items:
+            compliant_data.append({
+                'id': item.id,
+                'type': 'compliant',
+                'food_id': item.food_id,
+                'serving_id': item.serving_id,
+                'servings': float(item.servings),
+                'created_at': item.created_at.isoformat()
+            })
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'legacy_items': legacy_data,
+                'compliant_items': compliant_data,
+                'total_items': len(legacy_data) + len(compliant_data)
+            }
+        })
+    
+    except Exception as e:
+        logger.error(f"Error getting meal food items: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/nutrition/user/<string:user_id>/meal/<int:meal_id>/food/<food_type>/<int:item_id>', methods=['DELETE'])
+def delete_food_item_by_type(user_id, meal_id, food_type, item_id):
+    """Delete a food item by type (legacy or compliant)"""
+    try:
+        if food_type == 'legacy':
+            item = FoodItemLegacy.query.filter_by(
+                id=item_id,
+                user_id=user_id,
+                meal_id=meal_id
+            ).first()
+        elif food_type == 'compliant':
+            item = FoodItemCompliant.query.filter_by(
+                id=item_id,
+                user_id=user_id,
+                meal_id=meal_id
+            ).first()
+        else:
+            return jsonify({'success': False, 'error': 'Invalid food type'}), 400
+        
+        if not item:
+            return jsonify({'success': False, 'error': 'Food item not found'}), 404
+        
+        db.session.delete(item)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'{food_type.capitalize()} food item deleted successfully'
+        })
+    
+    except Exception as e:
+        logger.error(f"Error deleting food item: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route("/", methods=["GET"])
