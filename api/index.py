@@ -1403,57 +1403,123 @@ def delete_meal(user_id, meal_id):
         print(f"Error deleting meal: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# 5. Copy Food Items Between Meals
 @app.route('/api/nutrition/user/<string:user_id>/meal/<int:to_meal_id>/copy', methods=['POST'])
 def copy_food_items(user_id, to_meal_id):
     try:
         data = request.get_json()
         from_meal_id = data.get('fromMealId')
         
+        # Copy from separate tables (NEW SYSTEM)
+        # Get legacy items from source meal
+        legacy_items = FoodItemLegacy.query.filter_by(
+            user_id=user_id, 
+            meal_id=from_meal_id
+        ).all()
+        
+        # Get compliant items from source meal
+        compliant_items = FoodItemCompliant.query.filter_by(
+            user_id=user_id, 
+            meal_id=from_meal_id
+        ).all()
+        
+        copied_count = 0
+        
+        # Copy legacy items
+        for item in legacy_items:
+            new_legacy_item = FoodItemLegacy(
+                user_id=user_id,
+                meal_id=to_meal_id,
+                food_id=item.food_id,
+                serving_id=item.serving_id,
+                servings=item.servings,
+                foodname=item.foodname,
+                brandname=item.brandname,
+                calories=item.calories,
+                carbs=item.carbs,
+                protein=item.protein,
+                fats=item.fats,
+                saturated_fat=item.saturated_fat,
+                cholesterol=item.cholesterol,
+                sodium=item.sodium,
+                dietary_fiber=item.dietary_fiber,
+                sugar=item.sugar,
+                potassium=item.potassium,
+                trans_fat=item.trans_fat,
+                mono_fat=item.mono_fat,
+                poly_fat=item.poly_fat,
+                vit_a=item.vit_a,
+                vit_c=item.vit_c,
+                vit_d=item.vit_d,
+                net_carbs=item.net_carbs,
+                sugar_alc=item.sugar_alc,
+                sugar_added=item.sugar_added,
+                iron=item.iron,
+                calcium=item.calcium,
+                serving_qty=item.serving_qty,
+                serving_unit=item.serving_unit,
+                nutrition_multiplier=item.nutrition_multiplier,
+                verified=item.verified
+            )
+            db.session.add(new_legacy_item)
+            copied_count += 1
+        
+        # Copy compliant items
+        for item in compliant_items:
+            new_compliant_item = FoodItemCompliant(
+                user_id=user_id,
+                meal_id=to_meal_id,
+                food_id=item.food_id,
+                serving_id=item.serving_id,
+                servings=item.servings
+            )
+            db.session.add(new_compliant_item)
+            copied_count += 1
+        
+        # Also copy from JSON meals (BACKWARD COMPATIBILITY)
         user_date = UserDate.query.filter_by(user_id=user_id).first()
-        if not user_date:
-            return jsonify({'success': False, 'error': 'User date not found'}), 404
-        
-        meals = user_date.meals or []
-        from_meal = None
-        to_meal = None
-        
-        # Find both meals
-        for meal in meals:
-            if meal.get('id') == from_meal_id:
-                from_meal = meal
-            elif meal.get('id') == to_meal_id:
-                to_meal = meal
-        
-        if not from_meal or not to_meal:
-            return jsonify({'success': False, 'error': 'Meals not found'}), 404
-        
-        # Copy food items
-        if 'food_items' in from_meal:
-            if 'food_items' not in to_meal:
-                to_meal['food_items'] = []
+        if user_date and user_date.meals:
+            meals = user_date.meals or []
+            from_meal = None
+            to_meal = None
             
-            # Generate new IDs for copied items
-            existing_ids = [item.get('id', 0) for item in to_meal['food_items']]
-            next_id = max(existing_ids, default=0) + 1
+            # Find both meals in JSON structure
+            for meal in meals:
+                if meal.get('id') == from_meal_id:
+                    from_meal = meal
+                elif meal.get('id') == to_meal_id:
+                    to_meal = meal
             
-            for item in from_meal['food_items']:
-                copied_item = {
-                    **item,
-                    'id': next_id,
-                    'meal_id': to_meal_id
-                }
-                to_meal['food_items'].append(copied_item)
-                next_id += 1
+            # Copy JSON food items if they exist
+            if from_meal and to_meal and 'food_items' in from_meal:
+                if 'food_items' not in to_meal:
+                    to_meal['food_items'] = []
+                
+                # Generate new IDs for copied items
+                existing_ids = [item.get('id', 0) for item in to_meal['food_items']]
+                next_id = max(existing_ids, default=0) + 1
+                
+                for item in from_meal['food_items']:
+                    copied_item = {
+                        **item,
+                        'id': next_id,
+                        'meal_id': to_meal_id
+                    }
+                    to_meal['food_items'].append(copied_item)
+                    next_id += 1
+                    copied_count += 1
+                
+                user_date.meals = meals
+                user_date.updated_at = datetime.utcnow()
         
-        user_date.meals = meals
-        user_date.updated_at = datetime.utcnow()
         db.session.commit()
         
-        return jsonify({'success': True})
+        return jsonify({
+            'success': True,
+            'message': f'Successfully copied {copied_count} food items'
+        })
         
     except Exception as e:
-        print(f"Error copying food items: {str(e)}")
+        logger.error(f"Error copying food items: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # 6. Get Serving Sizes for Food (Reuses your existing FatSecret integration)
