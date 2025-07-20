@@ -123,6 +123,132 @@ class FoodItemCompliant(db.Model):
     __table_args__ = (
         db.Index('idx_compliant_user_meal', 'user_id', 'meal_id'),
     )
+class MyFood(db.Model):
+    __tablename__ = 'my_foods'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.String(255), nullable=False, index=True)
+    food_id = db.Column(db.String(255), nullable=False)  # Custom food ID
+    
+    # Food details
+    foodname = db.Column(db.String(500), nullable=False)
+    brandname = db.Column(db.String(500))
+    
+    # Nutrition data (per serving)
+    calories = db.Column(db.Numeric(10, 2), default=0)
+    carbs = db.Column(db.Numeric(10, 2), default=0)
+    protein = db.Column(db.Numeric(10, 2), default=0)
+    fats = db.Column(db.Numeric(10, 2), default=0)
+    saturated_fat = db.Column(db.Numeric(10, 2), default=0)
+    cholesterol = db.Column(db.Numeric(10, 2), default=0)
+    sodium = db.Column(db.Numeric(10, 2), default=0)
+    dietary_fiber = db.Column(db.Numeric(10, 2), default=0)
+    sugar = db.Column(db.Numeric(10, 2), default=0)
+    potassium = db.Column(db.Numeric(10, 2), default=0)
+    trans_fat = db.Column(db.Numeric(10, 2), default=0)
+    mono_fat = db.Column(db.Numeric(10, 2), default=0)
+    poly_fat = db.Column(db.Numeric(10, 2), default=0)
+    vit_a = db.Column(db.Numeric(10, 2), default=0)
+    vit_c = db.Column(db.Numeric(10, 2), default=0)
+    vit_d = db.Column(db.Numeric(10, 2), default=0)
+    net_carbs = db.Column(db.Numeric(10, 2), default=0)
+    sugar_alc = db.Column(db.Numeric(10, 2), default=0)
+    sugar_added = db.Column(db.Numeric(10, 2), default=0)
+    iron = db.Column(db.Numeric(10, 2), default=0)
+    calcium = db.Column(db.Numeric(10, 2), default=0)
+    
+    # Serving info
+    serving_qty = db.Column(db.Numeric(10, 2), default=1)
+    serving_unit = db.Column(db.String(255), default='serving')
+    
+    verified = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        db.Index('idx_my_foods_user', 'user_id'),
+    )
+
+class Recipe(db.Model):
+    __tablename__ = 'recipes'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.String(255), nullable=False, index=True)
+    name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text)
+    is_compliant = db.Column(db.Boolean, default=True)  # True for compliant meals, False for combos
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    __table_args__ = (
+        db.Index('idx_recipes_user', 'user_id'),
+    )
+
+class RecipeItemCompliant(db.Model):
+    __tablename__ = 'recipe_items_compliant'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    recipe_id = db.Column(db.Integer, db.ForeignKey('recipes.id'), nullable=False)
+    user_id = db.Column(db.String(255), nullable=False, index=True)
+    
+    # Only store IDs for compliant items (fresh API data)
+    food_id = db.Column(db.String(255), nullable=False)
+    serving_id = db.Column(db.String(255), nullable=False)
+    servings = db.Column(db.Numeric(10, 2), default=1)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    __table_args__ = (
+        db.Index('idx_recipe_items_compliant', 'recipe_id', 'user_id'),
+    )
+
+class RecipeItemLegacy(db.Model):
+    __tablename__ = 'recipe_items_legacy'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    recipe_id = db.Column(db.Integer, db.ForeignKey('recipes.id'), nullable=False)
+    user_id = db.Column(db.String(255), nullable=False, index=True)
+    
+    # Store full nutrition data for legacy combos
+    food_id = db.Column(db.String(255), nullable=False)
+    serving_id = db.Column(db.String(255), nullable=False)
+    servings = db.Column(db.Numeric(10, 2), default=1)
+    
+    # Full nutrition data stored
+    foodname = db.Column(db.String(500))
+    brandname = db.Column(db.String(500))
+    calories = db.Column(db.Numeric(10, 2), default=0)
+    carbs = db.Column(db.Numeric(10, 2), default=0)
+    protein = db.Column(db.Numeric(10, 2), default=0)
+    fats = db.Column(db.Numeric(10, 2), default=0)
+    saturated_fat = db.Column(db.Numeric(10, 2), default=0)
+    cholesterol = db.Column(db.Numeric(10, 2), default=0)
+    sodium = db.Column(db.Numeric(10, 2), default=0)
+    dietary_fiber = db.Column(db.Numeric(10, 2), default=0)
+    sugar = db.Column(db.Numeric(10, 2), default=0)
+    potassium = db.Column(db.Numeric(10, 2), default=0)
+    trans_fat = db.Column(db.Numeric(10, 2), default=0)
+    mono_fat = db.Column(db.Numeric(10, 2), default=0)
+    poly_fat = db.Column(db.Numeric(10, 2), default=0)
+    vit_a = db.Column(db.Numeric(10, 2), default=0)
+    vit_c = db.Column(db.Numeric(10, 2), default=0)
+    vit_d = db.Column(db.Numeric(10, 2), default=0)
+    net_carbs = db.Column(db.Numeric(10, 2), default=0)
+    sugar_alc = db.Column(db.Numeric(10, 2), default=0)
+    sugar_added = db.Column(db.Numeric(10, 2), default=0)
+    iron = db.Column(db.Numeric(10, 2), default=0)
+    calcium = db.Column(db.Numeric(10, 2), default=0)
+    serving_qty = db.Column(db.Numeric(10, 2), default=1)
+    serving_unit = db.Column(db.String(255))
+    nutrition_multiplier = db.Column(db.Numeric(10, 2), default=1.0)
+    verified = db.Column(db.Boolean, default=False)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    __table_args__ = (
+        db.Index('idx_recipe_items_legacy', 'recipe_id', 'user_id'),
+    )
 
 # FatSecret API credentials
 CLIENT_ID = os.getenv('CLIENT_ID')
@@ -1740,6 +1866,313 @@ def delete_food_item_by_type(user_id, meal_id, food_type, item_id):
     
     except Exception as e:
         logger.error(f"Error deleting food item: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+@app.route('/api/nutrition/user/<string:user_id>/my-foods', methods=['GET', 'POST'])
+def handle_my_foods(user_id):
+    """Get all custom foods for user or create new custom food"""
+    try:
+        if request.method == 'GET':
+            my_foods = MyFood.query.filter_by(user_id=user_id).order_by(MyFood.created_at.desc()).all()
+            
+            foods_data = []
+            for food in my_foods:
+                foods_data.append({
+                    'id': food.id,
+                    'food_id': food.food_id,
+                    'foodname': food.foodname,
+                    'brandname': food.brandname,
+                    'calories': float(food.calories),
+                    'carbs': float(food.carbs),
+                    'protein': float(food.protein),
+                    'fats': float(food.fats),
+                    'saturated_fat': float(food.saturated_fat),
+                    'cholesterol': float(food.cholesterol),
+                    'sodium': float(food.sodium),
+                    'dietary_fiber': float(food.dietary_fiber),
+                    'sugar': float(food.sugar),
+                    'potassium': float(food.potassium),
+                    'trans_fat': float(food.trans_fat),
+                    'mono_fat': float(food.mono_fat),
+                    'poly_fat': float(food.poly_fat),
+                    'vit_a': float(food.vit_a),
+                    'vit_c': float(food.vit_c),
+                    'vit_d': float(food.vit_d),
+                    'net_carbs': float(food.net_carbs),
+                    'sugar_alc': float(food.sugar_alc),
+                    'sugar_added': float(food.sugar_added),
+                    'iron': float(food.iron),
+                    'calcium': float(food.calcium),
+                    'serving_unit': food.serving_unit,
+                    'serving_qty': float(food.serving_qty),
+                    'verified': food.verified,
+                    'created_at': food.created_at.isoformat()
+                })
+            
+            return jsonify({
+                'success': True,
+                'data': foods_data
+            })
+        
+        elif request.method == 'POST':
+            data = request.json or {}
+            
+            # Create new custom food
+            my_food = MyFood(
+                user_id=user_id,
+                food_id=data.get('food_id', f"custom_{int(time.time())}"),
+                foodname=data.get('foodname', ''),
+                brandname=data.get('brandname', ''),
+                calories=float(data.get('calories', 0)),
+                carbs=float(data.get('carbs', 0)),
+                protein=float(data.get('protein', 0)),
+                fats=float(data.get('fats', 0)),
+                saturated_fat=float(data.get('saturated_fat', 0)),
+                cholesterol=float(data.get('cholesterol', 0)),
+                sodium=float(data.get('sodium', 0)),
+                dietary_fiber=float(data.get('dietary_fiber', 0)),
+                sugar=float(data.get('sugar', 0)),
+                potassium=float(data.get('potassium', 0)),
+                trans_fat=float(data.get('trans_fat', 0)),
+                mono_fat=float(data.get('mono_fat', 0)),
+                poly_fat=float(data.get('poly_fat', 0)),
+                vit_a=float(data.get('vit_a', 0)),
+                vit_c=float(data.get('vit_c', 0)),
+                vit_d=float(data.get('vit_d', 0)),
+                net_carbs=float(data.get('net_carbs', 0)),
+                sugar_alc=float(data.get('sugar_alc', 0)),
+                sugar_added=float(data.get('sugar_added', 0)),
+                iron=float(data.get('iron', 0)),
+                calcium=float(data.get('calcium', 0)),
+                serving_qty=float(data.get('serving_qty', 1)),
+                serving_unit=data.get('serving_unit', 'serving'),
+                verified=bool(data.get('verified', False))
+            )
+            
+            db.session.add(my_food)
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Custom food created successfully',
+                'data': {
+                    'id': my_food.id,
+                    'food_id': my_food.food_id
+                }
+            })
+    
+    except Exception as e:
+        logger.error(f"Error handling my foods: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/nutrition/user/<string:user_id>/my-foods/<int:food_id>', methods=['DELETE'])
+def delete_my_food(user_id, food_id):
+    """Delete a custom food"""
+    try:
+        my_food = MyFood.query.filter_by(id=food_id, user_id=user_id).first()
+        
+        if not my_food:
+            return jsonify({'success': False, 'error': 'Food not found'}), 404
+        
+        db.session.delete(my_food)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Custom food deleted successfully'
+        })
+    
+    except Exception as e:
+        logger.error(f"Error deleting my food: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+@app.route('/api/nutrition/user/<string:user_id>/recipes', methods=['GET', 'POST'])
+def handle_recipes(user_id):
+    """Get all recipes/meals for user or create new recipe"""
+    try:
+        if request.method == 'GET':
+            is_compliant = request.args.get('compliant', 'true').lower() == 'true'
+            
+            recipes = Recipe.query.filter_by(
+                user_id=user_id, 
+                is_compliant=is_compliant
+            ).order_by(Recipe.created_at.desc()).all()
+            
+            recipes_data = []
+            for recipe in recipes:
+                # Get recipe items based on type
+                if is_compliant:
+                    items = RecipeItemCompliant.query.filter_by(recipe_id=recipe.id).all()
+                    items_data = [{
+                        'food_id': item.food_id,
+                        'serving_id': item.serving_id,
+                        'servings': float(item.servings)
+                    } for item in items]
+                else:
+                    items = RecipeItemLegacy.query.filter_by(recipe_id=recipe.id).all()
+                    items_data = [{
+                        'id': item.id,
+                        'food_id': item.food_id,
+                        'serving_id': item.serving_id,
+                        'servings': float(item.servings),
+                        'foodname': item.foodname,
+                        'brandname': item.brandname,
+                        'calories': float(item.calories),
+                        'carbs': float(item.carbs),
+                        'protein': float(item.protein),
+                        'fats': float(item.fats),
+                        'serving_unit': item.serving_unit
+                    } for item in items]
+                
+                recipes_data.append({
+                    'recipe': {
+                        'id': recipe.id,
+                        'name': recipe.name,
+                        'description': recipe.description,
+                        'is_compliant': recipe.is_compliant,
+                        'created_at': recipe.created_at.isoformat()
+                    },
+                    'items': items_data
+                })
+            
+            return jsonify({
+                'success': True,
+                'data': recipes_data
+            })
+        
+        elif request.method == 'POST':
+            data = request.json or {}
+            
+            # Create new recipe
+            recipe = Recipe(
+                user_id=user_id,
+                name=data.get('name', ''),
+                description=data.get('description', ''),
+                is_compliant=bool(data.get('is_compliant', True))
+            )
+            
+            db.session.add(recipe)
+            db.session.flush()  # Get the ID
+            
+            # Add recipe items
+            items = data.get('items', [])
+            if recipe.is_compliant:
+                for item_data in items:
+                    item = RecipeItemCompliant(
+                        recipe_id=recipe.id,
+                        user_id=user_id,
+                        food_id=item_data.get('food_id', ''),
+                        serving_id=item_data.get('serving_id', ''),
+                        servings=float(item_data.get('servings', 1))
+                    )
+                    db.session.add(item)
+            else:
+                for item_data in items:
+                    item = RecipeItemLegacy(
+                        recipe_id=recipe.id,
+                        user_id=user_id,
+                        food_id=item_data.get('food_id', ''),
+                        serving_id=item_data.get('serving_id', ''),
+                        servings=float(item_data.get('servings', 1)),
+                        foodname=item_data.get('foodname', ''),
+                        brandname=item_data.get('brandname', ''),
+                        calories=float(item_data.get('calories', 0)),
+                        carbs=float(item_data.get('carbs', 0)),
+                        protein=float(item_data.get('protein', 0)),
+                        fats=float(item_data.get('fats', 0)),
+                        serving_unit=item_data.get('serving_unit', '')
+                    )
+                    db.session.add(item)
+            
+            db.session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'Recipe created successfully',
+                'data': {
+                    'id': recipe.id,
+                    'name': recipe.name
+                }
+            })
+    
+    except Exception as e:
+        logger.error(f"Error handling recipes: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/nutrition/user/<string:user_id>/recipes/<int:recipe_id>', methods=['DELETE'])
+def delete_recipe_route(user_id, recipe_id):
+    """Delete a recipe and its items"""
+    try:
+        recipe = Recipe.query.filter_by(id=recipe_id, user_id=user_id).first()
+        
+        if not recipe:
+            return jsonify({'success': False, 'error': 'Recipe not found'}), 404
+        
+        # Delete recipe items first
+        if recipe.is_compliant:
+            RecipeItemCompliant.query.filter_by(recipe_id=recipe_id).delete()
+        else:
+            RecipeItemLegacy.query.filter_by(recipe_id=recipe_id).delete()
+        
+        # Delete recipe
+        db.session.delete(recipe)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Recipe deleted successfully'
+        })
+    
+    except Exception as e:
+        logger.error(f"Error deleting recipe: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    
+@app.route('/api/nutrition/user/<string:user_id>/food-history', methods=['GET'])
+def get_food_history(user_id):
+    """Get recent/unique food items from user's meal history"""
+    try:
+        # Get unique foods from both legacy and compliant tables
+        legacy_foods = db.session.query(
+            FoodItemLegacy.food_id,
+            FoodItemLegacy.foodname,
+            FoodItemLegacy.brandname,
+            FoodItemLegacy.calories,
+            FoodItemLegacy.carbs,
+            FoodItemLegacy.protein,
+            FoodItemLegacy.fats,
+            FoodItemLegacy.serving_unit,
+            FoodItemLegacy.serving_qty,
+            FoodItemLegacy.verified,
+            FoodItemLegacy.servings,
+            FoodItemLegacy.created_at
+        ).filter_by(user_id=user_id).distinct(FoodItemLegacy.food_id).order_by(FoodItemLegacy.created_at.desc()).limit(50).all()
+        
+        # Combine and format
+        food_history = []
+        
+        # Add legacy foods
+        for food in legacy_foods:
+            food_history.append({
+                'foodId': food.food_id,
+                'foodname': food.foodname,
+                'brandname': food.brandname,
+                'calories': float(food.calories) if food.calories else 0,
+                'carbs': float(food.carbs) if food.carbs else 0,
+                'protein': float(food.protein) if food.protein else 0,
+                'fats': float(food.fats) if food.fats else 0,
+                'serving_unit': food.serving_unit,
+                'serving_qty': float(food.serving_qty) if food.serving_qty else 1,
+                'servings': float(food.servings) if food.servings else 1,
+                'verified': food.verified or False,
+                'created_at': food.created_at.isoformat() if food.created_at else None,
+                'source': 'legacy'
+            })
+        
+        return jsonify({
+            'success': True,
+            'data': food_history
+        })
+    
+    except Exception as e:
+        logger.error(f"Error getting food history: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route("/", methods=["GET"])
