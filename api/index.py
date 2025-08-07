@@ -570,6 +570,7 @@ def home():
             "/api/food/barcode": "Find food information using a barcode",
             "/api/food/barcode/debug": "Debug endpoint for barcode lookup",
             "/api/food/nlp": "Process natural language food descriptions (POST)"
+            
         },
         "status": "Token is " + ("active" if token_info["access_token"] else "not initialized"),
         "expires_in": max(0, int(token_info["expiry_time"] - time.time())) if token_info["expiry_time"] else 0
