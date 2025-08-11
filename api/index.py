@@ -336,7 +336,7 @@ def get_food(token):
 @app.route("/api/food/barcode", methods=["GET"])
 @token_required
 def find_food_by_barcode(token):
-    """Find food information by barcode"""
+    """Find food information by barcode - expects GTIN-13 formatted barcode from client"""
     barcode = request.args.get("barcode", "")
     region = request.args.get("region", "")
     language = request.args.get("language", "")
@@ -344,36 +344,12 @@ def find_food_by_barcode(token):
     if not barcode:
         return jsonify({"error": "Missing required parameter: barcode"}), 400
 
+    # Basic validation - client should have already processed the barcode
     if not barcode.isdigit():
         return jsonify({"error": "Invalid barcode format. Must contain only digits"}), 400
-
-    # Handle UPC-E (6-digit or 8-digit with number system + check digit)
-    if len(barcode) == 6:
-        try:
-            original_barcode = barcode
-            barcode = convert_upce_to_gtin13(barcode, number_system='0')
-            logger.info(f"Converted 6-digit UPC-E {original_barcode} to GTIN-13 {barcode}")
-        except ValueError as e:
-            return jsonify({"error": f"Invalid UPC-E barcode: {str(e)}"}), 400
-
-    elif len(barcode) == 8:
-        try:
-            number_system = barcode[0]
-            upce_body = barcode[1:7]
-            check_digit = barcode[7]  # optional validation step
-            original_barcode = barcode
-            barcode = convert_upce_to_gtin13(upce_body, number_system=number_system)
-            logger.info(f"Converted 8-digit UPC-E {original_barcode} to GTIN-13 {barcode}")
-        except ValueError as e:
-            return jsonify({"error": f"Invalid UPC-E barcode: {str(e)}"}), 400
-
-    # Zero-pad to GTIN-13 if shorter than 13
-    elif len(barcode) < 13:
-        original_barcode = barcode
-        barcode = barcode.zfill(13)
-        logger.info(f"Zero-padded barcode from {original_barcode} to {barcode}")
-    elif len(barcode) > 13:
-        return jsonify({"error": "Invalid barcode format. Must not exceed 13 digits"}), 400
+    
+    if len(barcode) != 13:
+        return jsonify({"error": "Barcode must be 13 digits (GTIN-13 format)"}), 400
 
     try:
         api_url = "https://platform.fatsecret.com/rest/server.api"
@@ -393,7 +369,7 @@ def find_food_by_barcode(token):
             if language:
                 params["language"] = language
 
-        logger.info(f"Looking up barcode: {barcode}")
+        logger.info(f"Looking up GTIN-13 barcode: {barcode}")
         response = call_api(api_url, headers, params)
 
         try:
@@ -408,6 +384,7 @@ def find_food_by_barcode(token):
                     food_id = barcode_json["food_id"]
 
             if food_id and str(food_id) != "0":
+                # Get detailed food information
                 food_params = {
                     "method": "food.get",
                     "food_id": food_id,
@@ -441,40 +418,7 @@ def find_food_by_barcode(token):
         return jsonify({"error": str(e), "barcode": barcode}), 500
 
 
-def convert_upce_to_gtin13(upce, number_system='0'):
-    """Convert UPC-E (6-digit) to GTIN-13 using number system and calculated check digit"""
-    if len(upce) != 6:
-        raise ValueError("UPC-E must be exactly 6 digits")
 
-    last_digit = upce[-1]
-
-    if last_digit in '012':
-        upca_body = f"{upce[0:2]}{last_digit}0000{upce[2:5]}"
-    elif last_digit == '3':
-        upca_body = f"{upce[0:3]}00000{upce[3:5]}"
-    elif last_digit == '4':
-        upca_body = f"{upce[0:4]}00000{upce[4]}"
-    elif last_digit in '56789':
-        upca_body = f"{upce[0:5]}0000{last_digit}"
-    else:
-        raise ValueError("Invalid UPC-E format")
-
-    upca11 = number_system + upca_body
-    check_digit = calculate_upc_check_digit(upca11)
-    full_upca = upca11 + check_digit
-    return full_upca.zfill(13)
-
-
-def calculate_upc_check_digit(upc11):
-    """Calculate the 12th digit (check digit) for a UPC-A code"""
-    if len(upc11) != 11 or not upc11.isdigit():
-        raise ValueError("UPC-A base must be 11 digits")
-
-    odd_sum = sum(int(upc11[i]) for i in range(0, 11, 2))
-    even_sum = sum(int(upc11[i]) for i in range(1, 11, 2))
-    total = (odd_sum * 3) + even_sum
-    check_digit = (10 - (total % 10)) % 10
-    return str(check_digit)
 
 
 @app.route("/api/food/barcode/debug", methods=["GET"])
